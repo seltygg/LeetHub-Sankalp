@@ -1,0 +1,51 @@
+name: Increment counter daily
+
+on:
+  schedule:
+    # Runs at 00:05 UTC every day – adjust as you like
+    - cron:  '5 0 * * *'
+  workflow_dispatch:          # allows you to trigger it manually if needed
+
+env:
+  FILE: counter.txt           # path to the counter file
+  COMMIT_MESSAGE: "chore: automated daily counter update"
+
+jobs:
+  increment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}   # repo-scoped token provided automatically
+
+      - name: Read, increment, and write counter
+        id: bump
+        run: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          current=$(cat "$FILE" | tr -d '\r\n' || echo 0)
+          if ! [[ "$current" =~ ^[0-9]+$ ]]; then
+            echo "File '$FILE' does not contain a plain integer." >&2
+            exit 1
+          fi
+
+          next=$((current + 1))
+          echo "$next" > "$FILE"
+
+          echo "Current value:  $current"
+          echo "Incremented to: $next"
+
+      - name: Commit and push if changed
+        run: |
+          if [[ -n "$(git status --porcelain $FILE)" ]]; then
+            git config --global user.name  "github-actions[bot]"
+            git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+            git add "$FILE"
+            git commit -m "$COMMIT_MESSAGE : ${{ steps.bump.outputs.next || '' }}"
+            git push
+          else
+            echo "No change to commit."
+          fi
