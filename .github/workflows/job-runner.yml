@@ -3,12 +3,11 @@ name: Increment counter daily
 on:
   schedule:
     # Runs at 00:05 UTC every day – adjust as you like
-    - cron:  '5 0 * * *'
-  workflow_dispatch:          # allows you to trigger it manually if needed
+    - cron: '5 0 * * *'
+  workflow_dispatch:          # manual trigger if needed
 
 env:
   FILE: counter.txt           # path to the counter file
-  COMMIT_MESSAGE: "chore: automated daily counter update"
 
 jobs:
   increment:
@@ -17,15 +16,14 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}   # repo-scoped token provided automatically
+          token: ${{ secrets.GITHUB_TOKEN }}   # repo-scoped token
 
-      - name: Read, increment, and write counter
+      - name: workflow-runner
         id: bump
         run: |
-          #!/usr/bin/env bash
           set -euo pipefail
-
           current=$(cat "$FILE" | tr -d '\r\n' || echo 0)
+
           if ! [[ "$current" =~ ^[0-9]+$ ]]; then
             echo "File '$FILE' does not contain a plain integer." >&2
             exit 1
@@ -34,17 +32,24 @@ jobs:
           next=$((current + 1))
           echo "$next" > "$FILE"
 
-          echo "Current value:  $current"
-          echo "Incremented to: $next"
+          # expose the new value as an output for later steps
+          echo "next=$next" >> "$GITHUB_OUTPUT"
 
+      
+      - name: Set commit message
+        run: |
+          ts=$(date -u '+%Y-%m-%d %H:%M:%S')
+          echo "COMMIT_MESSAGE=Update number: $ts" >> "$GITHUB_ENV"
+
+      
       - name: Commit and push if changed
         run: |
-          if [[ -n "$(git status --porcelain $FILE)" ]]; then
+          if [[ -n "$(git status --porcelain "$FILE")" ]]; then
             git config --global user.name  "seltygg"
             git config --global user.email "sankalpsikchi@arizona.edu"
 
             git add "$FILE"
-            git commit -m "$COMMIT_MESSAGE : ${{ steps.bump.outputs.next || '' }}"
+            git commit -m "$COMMIT_MESSAGE"
             git push
           else
             echo "No change to commit."
